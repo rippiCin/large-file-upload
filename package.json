@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev:server": "pnpm -C ./packages/server start:server",
-    "dev:client": "pnpm -C ./packages/client dev"
+    "dev:client": "pnpm -C ./packages/client dev",
+    "dev": "concurrently \"pnpm -C ./packages/server start:server\" \"pnpm -C ./packages/client dev\"",
+    "prepare": "husky install"
   },
   "workspaces": [
     "apps/*",
@@ -16,12 +18,20 @@
     "@babel/preset-react": "^7.22.5",
     "autoprefixer": "^10.4.14",
     "babel-loader": "^9.1.2",
+    "concurrently": "^8.2.0",
     "css-loader": "^6.8.1",
+    "eslint": "^8.44.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "eslint-plugin-react": "^7.32.2",
     "html-webpack-plugin": "^5.5.2",
+    "husky": "^8.0.3",
     "less": "^4.1.3",
     "less-loader": "^11.1.3",
+    "lint-staged": "^13.2.3",
     "postcss-loader": "^7.3.3",
     "postcss-preset-env": "^8.4.2",
+    "prettier": "^2.8.8",
     "style-loader": "^3.3.3",
     "webpack": "^5.86.0",
     "webpack-cli": "^5.1.4",
@@ -31,6 +41,16 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
+  },
+  "lint-staged": {
+    "**/*.{js,jsx,less,md,json}": [
+      "prettier --write"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
   },
   "keywords": [],
   "author": "",
