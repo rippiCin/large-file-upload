@@ -20,4 +20,7 @@ module.exports = {
     sourceType: "module",
   },
   plugins: ["react"],
+  rules: {
+    semi: ["error", "always"],
+  },
 };
