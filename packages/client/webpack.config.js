@@ -15,6 +15,10 @@ module.exports = {
 
   resolve: {
     extensions: ['.js', '.jsx'],
+    alias: {
+      '@': path.resolve('src'),
+      constant: path.resolve('src/constant'),
+    },
   },
 
   module: {
@@ -24,20 +28,13 @@ module.exports = {
         use: {
           loader: 'babel-loader',
           options: {
-            presets: [
-              '@babel/preset-react',
-            ],
-          }
+            presets: ['@babel/preset-react'],
+          },
         },
       },
       {
         test: /\.(css|less)$/,
-        use: [
-          'style-loader',
-          'css-loader',
-          'postcss-loader',
-          'less-loader'
-        ],
+        use: ['style-loader', 'css-loader', 'postcss-loader', 'less-loader'],
       },
     ],
   },

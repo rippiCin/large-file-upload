@@ -1,8 +1,11 @@
 import React from 'react';
+import Upload from '@/components/upload';
 
 const App = () => {
   return (
-    <div>client</div>
+    <div>
+      <Upload />
+    </div>
   );
 };
 

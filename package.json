@@ -6,7 +6,7 @@
   "scripts": {
     "dev:server": "pnpm -C ./packages/server start:server",
     "dev:client": "pnpm -C ./packages/client dev",
-    "dev": "concurrently \"pnpm -C ./packages/server start:server\" \"pnpm -C ./packages/client dev\"",
+    "dev": "concurrently \"pnpm -C ./packages/server start:dev\" \"pnpm -C ./packages/client dev\"",
     "prepare": "husky install"
   },
   "workspaces": [
