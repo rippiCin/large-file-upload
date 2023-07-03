@@ -2,6 +2,7 @@ const http = require('http');
 const fse = require('fs-extra');
 const multiparty = require('multiparty');
 const path = require('path');
+const { extractExt } = require('./utils/index');
 const server = http.createServer();
 
 // 大文件存储的目录
@@ -60,6 +61,7 @@ server.on('request', async (req, res) => {
     return;
   }
 
+  // 切片全部上传完的通知接口
   if (req.url === '/merge') {
     const data = await resolvePost(req);
     const { filename, size } = data;
@@ -73,6 +75,7 @@ server.on('request', async (req, res) => {
     );
   }
 
+  // 切片上传接口
   if (req.url === '/upload') {
     const multipart = new multiparty.Form();
 
@@ -91,6 +94,15 @@ server.on('request', async (req, res) => {
       console.log(`chunkDir${filename}`);
       res.end('received file chunk');
     });
+  }
+
+  // 校验文件是否已经上传过
+  if (req.url === '/validate') {
+    const data = await resolvePost(req);
+    const { fileHash, filename } = data;
+    const ext = extractExt(filename);
+    const filePath = path.resolve(UPLOAD_DIR, `${fileHash}${ext}`);
+    res.end(JSON.stringify({ shouldUpload: !fse.existsSync(filePath) }));
   }
 });
 

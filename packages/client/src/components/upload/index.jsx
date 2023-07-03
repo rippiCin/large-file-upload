@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 // import { INIT } from 'constant';
 import {
   Button,
@@ -6,22 +6,80 @@ import {
   Row,
   Col,
   Input,
+  Progress,
 } from 'antd';
 import { request, createFileChunk, mergeRequest } from '@/utils';
 
 const Upload = () => {
   // const [uploadStatus, setUploadStatus] = useState(INIT);
+  // 当前需要上传的文件信息
   const [currentFile, setCurrentFile] = useState();
+  // 当前需要上传的文件的切片
   const [fileChunks, setFileChunks] = useState([]);
-  console.log(fileChunks);
+  // 计算出来的hash值
+  const [hash, setHash] = useState();
+  // 当前已经完成上传的切片书
+  const [finishCount, setFinishCount] = useState(0);
+  // 当前hash计算进度
+  const [hashPercentage, setHashPercentage] = useState(0);
+  const worker = useRef();
 
+  // 获取文件上传进度
+  const getPercentage = () => {
+    const total = fileChunks.length;
+    if (total === 0) return 0.0;
+    return ((finishCount / total) * 100).toFixed(1);
+  };
+
+  console.log(fileChunks, finishCount, hash, hashPercentage);
+
+  // 完成选择文件后，记录文件信息以及初始化切片和进度
   const handleChange = (event) => {
     const file = event.target.files?.[0];
     if (file) {
+      setFinishCount(0);
+      setFileChunks([]);
       setCurrentFile(file);
     }
   };
 
+  // 每一个切片完成上传都更新一下进度
+  const handleProgress = () => {
+    setFinishCount((pre) => pre + 1);
+  };
+
+  // 开启webworker，进行计算文件contenthash
+  const calculateHash = (chunks) => {
+    return new Promise((resolve) => {
+      // 添加worker属性
+      worker.current = new Worker('/public/worker.js');
+      worker.current.postMessage({ chunks });
+      worker.current.onmessage = (e) => {
+        const { percentage, hash } = e.data;
+        setHashPercentage(percentage);
+        if (hash) {
+          resolve(hash);
+        }
+      };
+    });
+  };
+
+  // 校验文件是否已经上传过
+  const validateFileIsUploaded = async (filename, fileHash) => {
+    const { data } = await request({
+      url: 'http://localhost:3000/validate',
+      headers: {
+        'content-type': 'application/json',
+      },
+      data: JSON.stringify({
+        filename,
+        fileHash,
+      }),
+    });
+    return JSON.parse(data);
+  };
+
+  // 上传切片
   const uploadChunks = (chunks) => {
     const requestList = chunks
       .map(({ chunk, hash }) => {
@@ -35,6 +93,7 @@ const Upload = () => {
         return request({
           url: 'http://localhost:3000/upload',
           data: formData,
+          onProgress: handleProgress,
         });
       });
     Promise.all(requestList).then(() => {
@@ -42,11 +101,20 @@ const Upload = () => {
     });
   };
 
-  const handleUpload = () => {
+  // 进行文件切片以及计算文件的contenthash
+  const handleUpload = async () => {
     if (!currentFile) return;
     const fileChunkList = createFileChunk(currentFile);
+    const curHash = await calculateHash(fileChunkList);
+    const { shouldUpload } = await validateFileIsUploaded(currentFile.name, curHash);
+    if (!shouldUpload) {
+      setFinishCount(fileChunkList.length);
+      return;
+    }
+    setHash(curHash);
     const chunks = fileChunkList.map(({ file }, index) => ({
       chunk: file,
+      fileHash: curHash,
       hash: `${currentFile.name}-${index}`,
     }));
     setFileChunks(chunks);
@@ -56,11 +124,14 @@ const Upload = () => {
   return (
     <div className="upload">
       <Row>
-        <Col span={12}>
+        <Col span={24}>
           <Input type="file" style={{ width: 300 }} onChange={handleChange} />
           <Button style={{ marginLeft: 10 }} type="primary" onClick={handleUpload}>
             上传
           </Button>
+        </Col>
+        <Col span={24}>
+          <Progress percent={getPercentage()} />
         </Col>
       </Row>
     </div>

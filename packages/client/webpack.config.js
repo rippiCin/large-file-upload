@@ -11,6 +11,7 @@ module.exports = {
     compress: false, // gzip压缩,开发环境不开启,提升热更新速度
     hot: true, // 开启热更新，后面会讲react模块热替换具体配置
     historyApiFallback: true, // 解决history路由404问题
+    static: './src',
   },
 
   resolve: {

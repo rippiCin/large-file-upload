@@ -1,8 +1,7 @@
-const path = require('path');
-const TEMP_DIR = path.resolve(__dirname, 'temp');
-const PUBLIC_DIR = path.resolve(__dirname, 'public');
+const extractExt = (filename) => {
+  return filename.slice(filename.lastIndexOf('.'), filename.length);
+};
 
 module.exports = {
-  TEMP_DIR,
-  PUBLIC_DIR,
+  extractExt,
 };
