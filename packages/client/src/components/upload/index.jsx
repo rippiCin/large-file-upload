@@ -8,7 +8,7 @@ import {
   Input,
   Progress,
 } from 'antd';
-import { request, createFileChunk, mergeRequest } from '@/utils';
+import { request, createFileChunk, mergeRequest, filterUploadedChunk } from '@/utils';
 
 const Upload = () => {
   // const [uploadStatus, setUploadStatus] = useState(INIT);
@@ -18,10 +18,11 @@ const Upload = () => {
   const [fileChunks, setFileChunks] = useState([]);
   // 计算出来的hash值
   const [hash, setHash] = useState();
-  // 当前已经完成上传的切片书
+  // 当前已经完成上传的切片数
   const [finishCount, setFinishCount] = useState(0);
   // 当前hash计算进度
   const [hashPercentage, setHashPercentage] = useState(0);
+  const requestingList = useRef([]);
   const worker = useRef();
 
   // 获取文件上传进度
@@ -82,11 +83,11 @@ const Upload = () => {
   // 上传切片
   const uploadChunks = (chunks) => {
     const requestList = chunks
-      .map(({ chunk, hash }) => {
+      .map(({ chunk, hash, fileHash }) => {
         const formData = new FormData();
         formData.append('chunk', chunk);
         formData.append('hash', hash);
-        formData.append('filename', currentFile.name);
+        formData.append('filename', fileHash);
         return { formData };
       })
       .map(({ formData }) => {
@@ -94,19 +95,22 @@ const Upload = () => {
           url: 'http://localhost:3000/upload',
           data: formData,
           onProgress: handleProgress,
+          requestList: requestingList.current,
         });
       });
+    console.log('requestList', requestList);
     Promise.all(requestList).then(() => {
-      mergeRequest(currentFile.name);
+      mergeRequest({ hash: chunks[0].fileHash, name: currentFile.name });
     });
   };
 
   // 进行文件切片以及计算文件的contenthash
   const handleUpload = async () => {
     if (!currentFile) return;
+    // 将文件切片
     const fileChunkList = createFileChunk(currentFile);
     const curHash = await calculateHash(fileChunkList);
-    const { shouldUpload } = await validateFileIsUploaded(currentFile.name, curHash);
+    const { shouldUpload, uploadedList } = await validateFileIsUploaded(currentFile.name, curHash);
     if (!shouldUpload) {
       setFinishCount(fileChunkList.length);
       return;
@@ -115,10 +119,23 @@ const Upload = () => {
     const chunks = fileChunkList.map(({ file }, index) => ({
       chunk: file,
       fileHash: curHash,
-      hash: `${currentFile.name}-${index}`,
+      hash: `${curHash}-${index}`,
     }));
     setFileChunks(chunks);
-    uploadChunks(chunks);
+    uploadChunks(filterUploadedChunk(chunks, uploadedList));
+  };
+
+  // 暂停上传
+  const handlePause = () => {
+    while (requestingList.current.length) {
+      requestingList.current.pop().abort();
+    }
+  };
+
+  // 恢复上传
+  const handleResume = async () => {
+    const { uploadedList } = await validateFileIsUploaded(currentFile.name, hash);
+    await uploadChunks(filterUploadedChunk(fileChunks, uploadedList));
   };
 
   return (
@@ -128,6 +145,12 @@ const Upload = () => {
           <Input type="file" style={{ width: 300 }} onChange={handleChange} />
           <Button style={{ marginLeft: 10 }} type="primary" onClick={handleUpload}>
             上传
+          </Button>
+          <Button style={{ marginLeft: 10 }} type="primary" onClick={handlePause}>
+            暂停上传
+          </Button>
+          <Button style={{ marginLeft: 10 }} type="primary" onClick={handleResume}>
+            恢复上传
           </Button>
         </Col>
         <Col span={24}>

@@ -8,6 +8,14 @@ const server = http.createServer();
 // 大文件存储的目录
 const UPLOAD_DIR = path.resolve(__dirname, '..', 'target');
 
+// 返回已上传的所有的切片名
+const createUploadList = async (fileHash) => {
+  const fileFolder = `chunkDir${fileHash}`;
+  return fse.existsSync(path.resolve(UPLOAD_DIR, fileFolder))
+    ? await fse.readdir(path.resolve(UPLOAD_DIR, fileFolder))
+    : [];
+};
+
 const resolvePost = (req) => {
   return new Promise((resolve) => {
     let chunk = '';
@@ -64,9 +72,10 @@ server.on('request', async (req, res) => {
   // 切片全部上传完的通知接口
   if (req.url === '/merge') {
     const data = await resolvePost(req);
-    const { filename, size } = data;
-    const filePath = path.resolve(UPLOAD_DIR, `${filename}`);
-    await mergeFileChunk(filePath, filename, size);
+    const { hash, name, size } = data;
+    const ext = extractExt(name);
+    const filePath = path.resolve(UPLOAD_DIR, `${hash}${ext}`);
+    await mergeFileChunk(filePath, hash, size);
     res.end(
       JSON.stringify({
         code: 0,
@@ -85,7 +94,7 @@ server.on('request', async (req, res) => {
       const [hash] = fields.hash;
       const [filename] = fields.filename;
       // 创建临时文件夹用于存储chunk
-      // 天界chunkDir前缀与文件名做区分
+      // 添加chunkDir前缀与文件名做区分
       const chunkDir = path.resolve(UPLOAD_DIR, `chunkDir${filename}`);
       if (!fse.existsSync(chunkDir)) {
         await fse.mkdirs(chunkDir);
@@ -102,7 +111,8 @@ server.on('request', async (req, res) => {
     const { fileHash, filename } = data;
     const ext = extractExt(filename);
     const filePath = path.resolve(UPLOAD_DIR, `${fileHash}${ext}`);
-    res.end(JSON.stringify({ shouldUpload: !fse.existsSync(filePath) }));
+    const uploadedList = await createUploadList(fileHash);
+    res.end(JSON.stringify({ shouldUpload: !fse.existsSync(filePath), uploadedList }));
   }
 });
 
