@@ -1,12 +1,16 @@
 import { DEFAULT_SIZE } from 'constant';
 
 const request = ({ url, method = 'post', data, headers = {}, requestList }) => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     Object.keys(headers).forEach((key) => xhr.setRequestHeader(key, headers[key]));
     xhr.send(data);
     xhr.onload = (e) => {
+      console.log(e.target);
+      if (e.target.status === 500) {
+        reject(e.target.response);
+      }
       // 请求成功时将当前xhr从list中剔除
       if (requestList?.length) {
         const xhrIndex = requestList.findIndex((req) => req === xhr);
@@ -33,7 +37,7 @@ const createFileChunk = (file, size = DEFAULT_SIZE) => {
 };
 
 const mergeRequest = ({ hash, name }, size = DEFAULT_SIZE) => {
-  request({
+  return request({
     url: 'http://localhost:3000/merge',
     headers: {
       'content-type': 'application/json',

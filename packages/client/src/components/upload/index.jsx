@@ -1,33 +1,27 @@
 import React, { useState, useRef } from 'react';
-// import { INIT } from 'constant';
-import {
-  Button,
-  // message,
-  Row,
-  Col,
-  Input,
-  Progress,
-} from 'antd';
+import { INIT, PAUSE, UPLOADING, FAIL } from 'constant';
+import { Button, message, Row, Col, Input, Progress, Modal, Space } from 'antd';
 import { request, createFileChunk, mergeRequest, filterUploadedChunk } from '@/utils';
 
 const Upload = () => {
-  // const [uploadStatus, setUploadStatus] = useState(INIT);
+  const [uploadStatus, setUploadStatus] = useState(INIT);
   // 当前需要上传的文件信息
   const [currentFile, setCurrentFile] = useState();
-  // 当前需要上传的文件的切片
-  const [fileChunks, setFileChunks] = useState([]);
-  // 计算出来的hash值
-  const [hash, setHash] = useState();
   // 当前已经完成上传的切片数
   const [finishCount, setFinishCount] = useState(0);
   // 当前hash计算进度
   const [hashPercentage, setHashPercentage] = useState(0);
+  // 当前需要上传的文件的切片
+  const fileChunks = useRef([]);
+  // 计算出来的hash值
+  const hash = useRef();
   const requestingList = useRef([]);
   const worker = useRef();
+  const retryFunc = useRef();
 
   // 获取文件上传进度 contenthash占25 上传占75 避免在转hash时进度条一直为0，优化感官体验
   const getPercentage = () => {
-    const total = fileChunks.length;
+    const total = fileChunks.current?.length;
     // hash的进度百分比
     const hashPercent = hashPercentage * 25;
     // 都未开始时 进度为0
@@ -39,13 +33,19 @@ const Upload = () => {
     return (hashPercent + fileUploadPercent).toFixed(1);
   };
 
+  // 重置 一般是重新选择文件或者合并失败才调用
+  const reset = () => {
+    setUploadStatus(INIT);
+    setFinishCount(0);
+    fileChunks.current = [];
+    setHashPercentage(0);
+  };
+
   // 完成选择文件后，记录文件信息以及初始化切片和进度
   const handleChange = (event) => {
     const file = event.target.files?.[0];
     if (file) {
-      setFinishCount(0);
-      setFileChunks([]);
-      setHashPercentage(0);
+      reset();
       setCurrentFile(file);
     }
   };
@@ -71,21 +71,6 @@ const Upload = () => {
     });
   };
 
-  // 校验文件是否已经上传过
-  const validateFileIsUploaded = async (filename, fileHash) => {
-    const { data } = await request({
-      url: 'http://localhost:3000/validate',
-      headers: {
-        'content-type': 'application/json',
-      },
-      data: JSON.stringify({
-        filename,
-        fileHash,
-      }),
-    });
-    return JSON.parse(data);
-  };
-
   // 上传切片
   const uploadChunks = (chunks) => {
     const requestList = chunks
@@ -101,37 +86,80 @@ const Upload = () => {
           url: 'http://localhost:3000/upload',
           data: formData,
           requestList: requestingList.current,
-        }).then(() => {
-          handleProgress();
-        });
+        })
+          .then(() => {
+            handleProgress();
+          })
+          .catch(() => {
+            // 若上传异常，直接进行停止操作 并出现重试按钮
+            handlePause();
+            setUploadStatus(FAIL);
+            retryFunc.current = handleResume;
+          });
       });
-    console.log('requestList', requestList);
     Promise.all(requestList).then(() => {
-      mergeRequest({ hash: chunks[0].fileHash, name: currentFile.name });
+      mergeRequest({ hash: chunks[0].fileHash, name: currentFile.name }).catch(() => {
+        // 合并文件失败只能选择重传
+        reset();
+        message.error('上传文件失败，请重新上传');
+      });
     });
+  };
+
+  // 校验文件是否已经上传过
+  const validateFileIsUploaded = (filename, fileHash) => {
+    return request({
+      url: 'http://localhost:3000/validate',
+      headers: {
+        'content-type': 'application/json',
+      },
+      data: JSON.stringify({
+        filename,
+        fileHash,
+      }),
+    });
+  };
+
+  // 校验文件是否已经上传过，且校验成功后进行上传文件的前置工作 重新校验的方法
+  const validateFile = (fileChunkList, curHash) => {
+    validateFileIsUploaded(currentFile.name, curHash)
+      .then(({ data }) => {
+        const { shouldUpload, uploadedList } = JSON.parse(data);
+        if (!shouldUpload) {
+          setFinishCount(fileChunkList.length);
+          fileChunks.current = fileChunkList;
+          return;
+        }
+        // 需要进行上传的切片
+        const chunks = fileChunkList.map(({ file }, index) => ({
+          chunk: file,
+          fileHash: curHash,
+          hash: `${curHash}-${index}`,
+        }));
+        fileChunks.current = chunks;
+        uploadChunks(filterUploadedChunk(chunks, uploadedList));
+      })
+      .catch(() => {
+        setUploadStatus(FAIL);
+        // 若校验出错，出现重试按钮，并保存重试的方法
+        retryFunc.current = () => {
+          validateFile(fileChunkList, curHash);
+        };
+      });
   };
 
   // 进行文件切片以及计算文件的contenthash
   const handleUpload = async () => {
-    if (!currentFile) return;
+    if (!currentFile) {
+      message.error('请选择需要上传的文件');
+      return;
+    }
+    setUploadStatus(UPLOADING);
     // 将文件切片
     const fileChunkList = createFileChunk(currentFile);
     const curHash = await calculateHash(fileChunkList);
-    const { shouldUpload, uploadedList } = await validateFileIsUploaded(currentFile.name, curHash);
-    if (!shouldUpload) {
-      setFinishCount(fileChunkList.length);
-      setFileChunks(fileChunkList);
-      return;
-    }
-    setHash(curHash);
-    // 需要进行上传的切片
-    const chunks = fileChunkList.map(({ file }, index) => ({
-      chunk: file,
-      fileHash: curHash,
-      hash: `${curHash}-${index}`,
-    }));
-    setFileChunks(chunks);
-    uploadChunks(filterUploadedChunk(chunks, uploadedList));
+    hash.current = curHash;
+    validateFile(fileChunkList, curHash);
   };
 
   // 暂停上传
@@ -140,27 +168,64 @@ const Upload = () => {
       requestingList.current.pop().abort();
     }
   };
-
+  console.log('hash', hash);
   // 恢复上传
-  const handleResume = async () => {
-    const { uploadedList } = await validateFileIsUploaded(currentFile.name, hash);
-    await uploadChunks(filterUploadedChunk(fileChunks, uploadedList));
+  const handleResume = () => {
+    setUploadStatus(UPLOADING);
+    validateFileIsUploaded(currentFile.name, hash.current).then(({ data }) => {
+      const { uploadedList } = JSON.parse(data);
+      uploadChunks(filterUploadedChunk(fileChunks.current, uploadedList));
+    });
+  };
+
+  // 重试
+  const handleRetry = () => {
+    setUploadStatus(UPLOADING);
+    retryFunc.current();
   };
 
   return (
     <div className="upload">
       <Row>
         <Col span={24}>
-          <Input type="file" style={{ width: 300 }} onChange={handleChange} />
-          <Button style={{ marginLeft: 10 }} type="primary" onClick={handleUpload}>
-            上传
-          </Button>
-          <Button style={{ marginLeft: 10 }} type="primary" onClick={handlePause}>
-            暂停上传
-          </Button>
-          <Button style={{ marginLeft: 10 }} type="primary" onClick={handleResume}>
-            恢复上传
-          </Button>
+          <Space gutter={[10]}>
+            <Input type="file" style={{ width: 300 }} onChange={handleChange} />
+            <Button type="primary" onClick={handleUpload} disabled={uploadStatus !== INIT}>
+              上传
+            </Button>
+            <Button
+              type="primary"
+              disabled={uploadStatus !== UPLOADING}
+              onClick={() => {
+                if (!fileChunks.current?.length) {
+                  Modal.confirm({
+                    title: '提示',
+                    content: '此时暂停，上传进度将会清空，请确定是否要取消上传',
+                    onOk() {
+                      reset();
+                      worker.current.terminate?.();
+                      setHashPercentage(0);
+                    },
+                  });
+                } else {
+                  handlePause();
+                  setUploadStatus(PAUSE);
+                }
+              }}
+            >
+              暂停上传
+            </Button>
+            {uploadStatus === PAUSE && (
+              <Button type="primary" onClick={handleResume}>
+                恢复上传
+              </Button>
+            )}
+            {uploadStatus === FAIL && (
+              <Button type="primary" onClick={handleRetry}>
+                重试
+              </Button>
+            )}
+          </Space>
         </Col>
         <Col span={24}>
           <Progress percent={getPercentage()} />

@@ -71,48 +71,76 @@ server.on('request', async (req, res) => {
 
   // 切片全部上传完的通知接口
   if (req.url === '/merge') {
-    const data = await resolvePost(req);
-    const { hash, name, size } = data;
-    const ext = extractExt(name);
-    const filePath = path.resolve(UPLOAD_DIR, `${hash}${ext}`);
-    await mergeFileChunk(filePath, hash, size);
-    res.end(
-      JSON.stringify({
-        code: 0,
-        message: 'file merged success',
-      })
-    );
+    try {
+      const data = await resolvePost(req);
+      const { hash, name, size } = data;
+      const ext = extractExt(name);
+      const filePath = path.resolve(UPLOAD_DIR, `${hash}${ext}`);
+      await mergeFileChunk(filePath, hash, size);
+      res.end(
+        JSON.stringify({
+          code: 0,
+          message: 'file merged success',
+        })
+      );
+    } catch (error) {
+      res.status = 200;
+      res.end(
+        JSON.stringify({
+          code: 500,
+          message: '文件上传失败，请重试',
+        })
+      );
+    }
   }
 
   // 切片上传接口
   if (req.url === '/upload') {
     const multipart = new multiparty.Form();
-
     multipart.parse(req, async (err, fields, files) => {
-      if (err) return;
+      if (err) {
+        res.statusCode = 500;
+        res.end(
+          JSON.stringify({
+            code: 500,
+            message: '文件上传失败，请重试',
+          })
+        );
+        return;
+      }
       const [chunk] = files.chunk;
       const [hash] = fields.hash;
       const [filename] = fields.filename;
       // 创建临时文件夹用于存储chunk
       // 添加chunkDir前缀与文件名做区分
+      // eslint-disable-next-line no-unreachable
       const chunkDir = path.resolve(UPLOAD_DIR, `chunkDir${filename}`);
       if (!fse.existsSync(chunkDir)) {
         await fse.mkdirs(chunkDir);
       }
       await fse.move(chunk.path, `${chunkDir}/${hash}`);
-      console.log(`chunkDir${filename}`);
       res.end('received file chunk');
     });
   }
 
   // 校验文件是否已经上传过
   if (req.url === '/validate') {
-    const data = await resolvePost(req);
-    const { fileHash, filename } = data;
-    const ext = extractExt(filename);
-    const filePath = path.resolve(UPLOAD_DIR, `${fileHash}${ext}`);
-    const uploadedList = await createUploadList(fileHash);
-    res.end(JSON.stringify({ shouldUpload: !fse.existsSync(filePath), uploadedList }));
+    try {
+      const data = await resolvePost(req);
+      const { fileHash, filename } = data;
+      const ext = extractExt(filename);
+      const filePath = path.resolve(UPLOAD_DIR, `${fileHash}${ext}`);
+      const uploadedList = await createUploadList(fileHash);
+      res.end(JSON.stringify({ shouldUpload: !fse.existsSync(filePath), uploadedList }));
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(
+        JSON.stringify({
+          code: 500,
+          message: '校验出错，请重新选择文件进行上传',
+        })
+      );
+    }
   }
 });
 
