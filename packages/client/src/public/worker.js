@@ -13,12 +13,12 @@ self.onmessage = (e) => {
       spark.append(event.target.result);
       if (count === chunks.length) {
         self.postMessage({
-          percentage: 100,
+          percentage: 1,
           hash: spark.end(),
         });
         self.close();
       } else {
-        percentage += 100 / chunks.length;
+        percentage = count / chunks.length;
         self.postMessage({ percentage });
         loadNext(count);
       }

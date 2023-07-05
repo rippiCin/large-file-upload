@@ -25,14 +25,19 @@ const Upload = () => {
   const requestingList = useRef([]);
   const worker = useRef();
 
-  // 获取文件上传进度
+  // 获取文件上传进度 contenthash占25 上传占75 避免在转hash时进度条一直为0，优化感官体验
   const getPercentage = () => {
     const total = fileChunks.length;
-    if (total === 0) return 0.0;
-    return ((finishCount / total) * 100).toFixed(1);
+    // hash的进度百分比
+    const hashPercent = hashPercentage * 25;
+    // 都未开始时 进度为0
+    if (total === 0 && hashPercent === 0) return 0.0;
+    // 转hash时 返回hash进度
+    if (total === 0) return hashPercent.toFixed(1);
+    // 文件上传的进度百分比
+    const fileUploadPercent = (finishCount / total) * 75;
+    return (hashPercent + fileUploadPercent).toFixed(1);
   };
-
-  console.log(fileChunks, finishCount, hash, hashPercentage);
 
   // 完成选择文件后，记录文件信息以及初始化切片和进度
   const handleChange = (event) => {
@@ -40,6 +45,7 @@ const Upload = () => {
     if (file) {
       setFinishCount(0);
       setFileChunks([]);
+      setHashPercentage(0);
       setCurrentFile(file);
     }
   };
@@ -94,8 +100,9 @@ const Upload = () => {
         return request({
           url: 'http://localhost:3000/upload',
           data: formData,
-          onProgress: handleProgress,
           requestList: requestingList.current,
+        }).then(() => {
+          handleProgress();
         });
       });
     console.log('requestList', requestList);
@@ -113,9 +120,11 @@ const Upload = () => {
     const { shouldUpload, uploadedList } = await validateFileIsUploaded(currentFile.name, curHash);
     if (!shouldUpload) {
       setFinishCount(fileChunkList.length);
+      setFileChunks(fileChunkList);
       return;
     }
     setHash(curHash);
+    // 需要进行上传的切片
     const chunks = fileChunkList.map(({ file }, index) => ({
       chunk: file,
       fileHash: curHash,

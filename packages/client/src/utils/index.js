@@ -1,9 +1,8 @@
 import { DEFAULT_SIZE } from 'constant';
 
-const request = ({ url, method = 'post', data, headers = {}, onProgress = (e) => e, requestList }) => {
+const request = ({ url, method = 'post', data, headers = {}, requestList }) => {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = onProgress;
     xhr.open(method, url);
     Object.keys(headers).forEach((key) => xhr.setRequestHeader(key, headers[key]));
     xhr.send(data);
@@ -22,6 +21,7 @@ const request = ({ url, method = 'post', data, headers = {}, onProgress = (e) =>
   });
 };
 
+// 创建切片
 const createFileChunk = (file, size = DEFAULT_SIZE) => {
   const fileChunkList = [];
   let cur = 0;
