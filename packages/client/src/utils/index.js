@@ -26,7 +26,7 @@ const request = ({ url, method = 'post', data, headers = {}, requestList }) => {
 };
 
 // 创建切片
-const createFileChunk = (file, size = DEFAULT_SIZE) => {
+const createFileChunk = (file, size) => {
   const fileChunkList = [];
   let cur = 0;
   while (cur < file.size) {
@@ -36,6 +36,7 @@ const createFileChunk = (file, size = DEFAULT_SIZE) => {
   return fileChunkList;
 };
 
+// TODO：请求不应放在utils中，可以考虑将所有的请求都放到server中或者将本方法写入到upload中
 const mergeRequest = ({ hash, name }, size = DEFAULT_SIZE) => {
   return request({
     url: 'http://localhost:3000/merge',

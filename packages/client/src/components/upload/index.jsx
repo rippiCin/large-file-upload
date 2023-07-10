@@ -1,9 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { INIT, PAUSE, UPLOADING, FAIL } from 'constant';
+import Proptypes from 'prop-types';
+import { INIT, PAUSE, UPLOADING, FAIL, SUCCESS, DEFAULT_SIZE } from 'constant';
 import { Button, message, Row, Col, Input, Progress, Modal, Space } from 'antd';
 import { request, createFileChunk, mergeRequest, filterUploadedChunk } from '@/utils';
+import uploadingFiles from '@/store';
 
-const Upload = () => {
+const Upload = ({ splitSize }) => {
+  // 上传状态
   const [uploadStatus, setUploadStatus] = useState(INIT);
   // 当前需要上传的文件信息
   const [currentFile, setCurrentFile] = useState();
@@ -19,7 +22,7 @@ const Upload = () => {
   const worker = useRef();
   const retryFunc = useRef();
 
-  // 获取文件上传进度 contenthash占25 上传占75 避免在转hash时进度条一直为0，优化感官体验
+  // 获取文件上传进度 contenthash占25 上传占74 避免在转hash时进度条一直为0，优化感官体验 合并占最后的1
   const getPercentage = () => {
     const total = fileChunks.current?.length;
     // hash的进度百分比
@@ -29,12 +32,18 @@ const Upload = () => {
     // 转hash时 返回hash进度
     if (total === 0) return hashPercent.toFixed(1);
     // 文件上传的进度百分比
-    const fileUploadPercent = (finishCount / total) * 75;
+    const fileUploadPercent = (finishCount / total) * 74;
     return (hashPercent + fileUploadPercent).toFixed(1);
   };
 
   // 重置 一般是重新选择文件或者合并失败才调用
   const reset = () => {
+    // 重置时，如果存在hash说明是合并失败导致需要重新上传
+    if (hash.current) {
+      // 需要将该文件从记录中删除，这样才能重新上传
+      uploadingFiles.deleteUploadingFile(hash.current);
+      hash.current = null;
+    }
     setUploadStatus(INIT);
     setFinishCount(0);
     fileChunks.current = [];
@@ -98,11 +107,19 @@ const Upload = () => {
           });
       });
     Promise.all(requestList).then(() => {
-      mergeRequest({ hash: chunks[0].fileHash, name: currentFile.name }).catch(() => {
-        // 合并文件失败只能选择重传
-        reset();
-        message.error('上传文件失败，请重新上传');
-      });
+      mergeRequest({ hash: chunks[0].fileHash, name: currentFile.name })
+        .then(() => {
+          // 合并成功了，需要将本文件从记录中去掉
+          uploadingFiles.deleteUploadingFile(hash.current);
+          hash.current = null;
+          // 并且将进度条设置为100
+          setUploadStatus(SUCCESS);
+        })
+        .catch(() => {
+          // 合并文件失败只能选择重传
+          reset();
+          message.error('上传文件失败，请重新上传');
+        });
     });
   };
 
@@ -156,10 +173,17 @@ const Upload = () => {
     }
     setUploadStatus(UPLOADING);
     // 将文件切片
-    const fileChunkList = createFileChunk(currentFile);
+    const fileChunkList = createFileChunk(currentFile, splitSize);
     const curHash = await calculateHash(fileChunkList);
     hash.current = curHash;
-    validateFile(fileChunkList, curHash);
+    // 在上传前，前端先校验是否有相同的文件正在上传，若无则进行上传
+    if (uploadingFiles.checkFileIsUploading(curHash)) {
+      message.error('该文件正在上传中，请勿重复上传');
+      return;
+    } else {
+      uploadingFiles.addUploadingFile(curHash);
+      validateFile(fileChunkList, curHash);
+    }
   };
 
   // 暂停上传
@@ -168,7 +192,7 @@ const Upload = () => {
       requestingList.current.pop().abort();
     }
   };
-  console.log('hash', hash);
+
   // 恢复上传
   const handleResume = () => {
     setUploadStatus(UPLOADING);
@@ -228,11 +252,19 @@ const Upload = () => {
           </Space>
         </Col>
         <Col span={24}>
-          <Progress percent={getPercentage()} />
+          <Progress percent={uploadStatus === SUCCESS ? 100.0 : getPercentage()} />
         </Col>
       </Row>
     </div>
   );
+};
+
+Upload.propTypes = {
+  splitSize: Proptypes.number,
+};
+
+Upload.defaultProps = {
+  splitSize: DEFAULT_SIZE,
 };
 
 export default Upload;
