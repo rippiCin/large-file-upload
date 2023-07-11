@@ -143,8 +143,7 @@ const Upload = ({ splitSize }) => {
       .then(({ data }) => {
         const { shouldUpload, uploadedList } = JSON.parse(data);
         if (!shouldUpload) {
-          setFinishCount(fileChunkList.length);
-          fileChunks.current = fileChunkList;
+          setUploadStatus(SUCCESS);
           return;
         }
         // 需要进行上传的切片
@@ -175,12 +174,16 @@ const Upload = ({ splitSize }) => {
     // 将文件切片
     const fileChunkList = createFileChunk(currentFile, splitSize);
     const curHash = await calculateHash(fileChunkList);
-    hash.current = curHash;
     // 在上传前，前端先校验是否有相同的文件正在上传，若无则进行上传
     if (uploadingFiles.checkFileIsUploading(curHash)) {
-      message.error('该文件正在上传中，请勿重复上传');
+      retryFunc.current = () => {
+        message.error('该文件正在上传中，请勿重复上传');
+        setUploadStatus(FAIL);
+      };
+      retryFunc.current();
       return;
     } else {
+      hash.current = curHash;
       uploadingFiles.addUploadingFile(curHash);
       validateFile(fileChunkList, curHash);
     }
