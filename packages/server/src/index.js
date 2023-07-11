@@ -84,7 +84,7 @@ server.on('request', async (req, res) => {
         })
       );
     } catch (error) {
-      res.status = 200;
+      res.statusCode = 500;
       res.end(
         JSON.stringify({
           code: 500,
