@@ -38,7 +38,7 @@ const Upload = ({ splitSize }) => {
 
   // 重置 一般是重新选择文件或者合并失败才调用
   const reset = () => {
-    // 重置时，如果存在hash说明是合并失败导致需要重新上传
+    // 重置时，如果存在hash说明是合并失败导致需要重新上传/暂停上传后重新选择文件
     if (hash.current) {
       // 需要将该文件从记录中删除，这样才能重新上传
       uploadingFiles.deleteUploadingFile(hash.current);
@@ -174,19 +174,19 @@ const Upload = ({ splitSize }) => {
     // 将文件切片
     const fileChunkList = createFileChunk(currentFile, splitSize);
     const curHash = await calculateHash(fileChunkList);
-    // 在上传前，前端先校验是否有相同的文件正在上传，若无则进行上传
-    if (uploadingFiles.checkFileIsUploading(curHash)) {
-      retryFunc.current = () => {
+    retryFunc.current = () => {
+      // 在上传前，前端先校验是否有相同的文件正在上传，若无则进行上传
+      if (uploadingFiles.checkFileIsUploading(curHash)) {
         message.error('该文件正在上传中，请勿重复上传');
         setUploadStatus(FAIL);
-      };
-      retryFunc.current();
-      return;
-    } else {
-      hash.current = curHash;
-      uploadingFiles.addUploadingFile(curHash);
-      validateFile(fileChunkList, curHash);
-    }
+        return;
+      } else {
+        hash.current = curHash;
+        uploadingFiles.addUploadingFile(curHash);
+        validateFile(fileChunkList, curHash);
+      }
+    };
+    retryFunc.current();
   };
 
   // 暂停上传
