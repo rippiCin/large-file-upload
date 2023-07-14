@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import Proptypes from 'prop-types';
-import { INIT, PAUSE, UPLOADING, FAIL, SUCCESS, DEFAULT_SIZE } from 'constant';
+import { INIT, PAUSE, UPLOADING, FAIL, SUCCESS, DEFAULT_SIZE, STATUS_COLOR_DICT } from 'constant';
 import { Button, message, Row, Col, Input, Progress, Modal, Space } from 'antd';
 import { request, createFileChunk, mergeRequest, filterUploadedChunk } from '@/utils';
 import uploadingFiles from '@/store';
@@ -107,7 +107,7 @@ const Upload = ({ splitSize }) => {
           });
       });
     Promise.all(requestList).then(() => {
-      mergeRequest({ hash: chunks[0].fileHash, name: currentFile.name })
+      mergeRequest({ hash: hash.current, name: currentFile.name })
         .then(() => {
           // 合并成功了，需要将本文件从记录中去掉
           uploadingFiles.deleteUploadingFile(hash.current);
@@ -255,7 +255,10 @@ const Upload = ({ splitSize }) => {
           </Space>
         </Col>
         <Col span={24}>
-          <Progress percent={uploadStatus === SUCCESS ? 100.0 : getPercentage()} />
+          <Progress
+            percent={uploadStatus === SUCCESS ? 100.0 : getPercentage()}
+            strokeColor={STATUS_COLOR_DICT[uploadStatus]}
+          />
         </Col>
       </Row>
     </div>
